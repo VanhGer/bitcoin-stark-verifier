@@ -50,9 +50,10 @@ verifier off-chain. Existing garbled-verifier and witness-encryption designs
 check elliptic-curve SNARKs, which do not resist a quantum adversary. A
 hash-based STARK verifier removes that dependency but is difficult to garble:
 it branches on data, its transcript is defined by an implementation, hashing
-dominates its cost, and a stored circuit of $10^8$ gates does not fit in memory.
-We garble the Plonky3 verifier path exercised by a Keccak-$f$ algebraic
-intermediate representation (AIR) over WHIR,
+and field multiplications dominate its cost, and a stored circuit of $10^8$
+gates does not fit in memory. We garble the Plonky3 verifier path exercised by
+a Keccak-$f$ algebraic intermediate representation (AIR) without public values
+over WHIR,
 using the binary tower field $\F$ and Blake3 for commitments, the transcript and
 garbling. Additions are free under free-XOR, a multiplication costs $2{,}187$
 \AND{} gates, a Blake3 compression costs $10{,}281$, and a streaming garbler
@@ -88,7 +89,9 @@ post-quantum. Thus the artifact is a measured hash-based verifier and a cost
 study, not a complete post-quantum Bitcoin protocol. Recursing a zkVM proof
 through a narrow tape machine, with experimental and unreviewed changes to the
 proof system that we list, brings the garbled verifier's input to 564{,}552
-bits in 218.0M non-free gates.
+bits in 218.0M non-free gates. Each of its proofs meets 100 bits by Plonky3's
+assessment, which does not count those changes, and the circuit binds neither
+the zkVM program nor its outputs.
 \end{abstract}
 
 % =====================================================================
@@ -133,10 +136,10 @@ first be wrapped in such a SNARK, which reintroduces both.
 cheap by choosing its field. Under free-XOR~\cite{ks08} a garbled circuit pays
 only for non-linear gates, and in a field of characteristic two every addition
 is an \XOR. A STARK over the binary tower field $\F$ with Blake3 commitments
-therefore costs, as a garbled circuit, little more than its hashes and a
-moderate number of field multiplications. Its algebraic checks rest on WHIR
-over $\F$, while Blake3 instantiates the commitments, Fiat--Shamir transcript
-and garbling PRF.
+therefore costs, as a garbled circuit, its hashes and field multiplications,
+with additions free. Its algebraic checks rest on WHIR over $\F$, while Blake3
+instantiates the commitments, the Fiat--Shamir transcript and the garbling hash,
+modeled as circular correlation robust (\S\ref{sec:security}).
 
 \paragraph{Challenges.} Four problems stand between this idea and a working
 garbled verifier.
@@ -148,7 +151,7 @@ garbled verifier.
     sample exactly the bytes that the prover's implementation does, or Fiat--Shamir
     soundness is lost, and that byte schedule is specified nowhere outside the
     implementation.
-  \item[C3] \emph{Hashing dominates.} Merkle paths, leaf rows and the transcript
+  \item[C3] \emph{Hashing is expensive.} Merkle paths, leaf rows and the transcript
     are Blake3 compressions, and a compression costs more than four field
     multiplications.
   \item[C4] \emph{Memory.} A verifier of $10^8$ non-free gates has several
@@ -244,8 +247,8 @@ The garbled circuit is one 16-byte ciphertext per \AND{} or \textsf{OR} gate.
 
 Two details matter in practice. First, $\Delta$ must be secret and fresh for
 each garbling: with a public $\Delta$ any label yields its complement, and the
-output's other label is free to compute. Second, a hash-based PRF gives labels
-no algebraic structure. RSA-based garbling proposals for BitVM3 were broken
+output's other label is free to compute. Second, a hash modeled as circular correlation
+robust (\S\ref{sec:security}) gives labels no algebraic structure. RSA-based garbling proposals for BitVM3 were broken
 exactly through such structure: label forgery by extended Euclid on coprime
 exponents, and by the Franklin--Reiter related-message
 attack~\cite{flb25}.
@@ -1561,7 +1564,11 @@ and Blake3, the program that verifies a shrunk zkVM proof, and its
 straight-line tape over $\F$. A five-table tape machine (ledger, arithmetic,
 rewiring, Blake3 message and round tables) proves a run of a tape, and its own
 verifier is recorded and proved again: narrow recursion. We translate a tape
-gate by gate (\texttt{whir-gc/src/binary\_tape.rs}). For a Fibonacci program the
+gate by gate (\texttt{whir-gc/src/binary\_tape.rs}). The tape machine binds no
+public values, so from level 2 on the binary stage's public-value digest, which
+commits to the zkVM program's verifying key and outputs, is a private witness.
+The circuit therefore attests that some zkVM proof verifies, not which program
+ran or what it output. For a Fibonacci program the
 binary stage's verifier has 3.37G non-free gates and 18{,}050{,}304 input bits;
 after three rounds of narrow recursion the verifier of the last proof has the
 sizes in Table~\ref{tab:recursion}. Every row is the verifier of a real proof:
@@ -1688,7 +1695,8 @@ anchor transactions and the multi-copy soldering are not constructed
 total. $^{\ddagger}$Verifier assumptions
 only. A surrounding protocol additionally uses discrete-logarithm signatures, or
 requires the unimplemented hash-based multi-copy soldering and a post-quantum
-transaction-authorization mechanism. Neither statement has public values. The
+transaction-authorization mechanism. Neither statement has public values; the
+recursion row binds neither the zkVM program nor its outputs. The
 recursion row is the verifier of the last narrow-recursion proof of Ziren's
 binary stage (Table~\ref{tab:recursion}), with the experimental proof-system
 changes listed in \S\ref{sec:eval}.}
