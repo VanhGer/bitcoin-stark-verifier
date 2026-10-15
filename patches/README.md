@@ -10,6 +10,7 @@ the garbled verifier (`whir-gc`) measures at **564,552 input bits**
 | `ziren-9398469a.patch` | Ziren branch `whir-gc/narrow-verifier-input` at `9398469a` (on `feat/binary-whir-blake3` `f6137ecc`) | 10 |
 | `zkm_blake3_grind.cu` | — | CUDA proof-of-work grinder that the Plonky3 patch links |
 | `ziren-dumper.patch` | `f6137ecc` + `ziren-9398469a.patch` without its dumper | the dumper test, rewritten (see below) |
+| `ziren-addr26.patch` | the same | 26-bit addresses and compression ids (see below) |
 
 Both patches apply with `git apply` to a clean checkout of their base, and the
 result is byte-for-byte the tree the measurements were run from (checked
@@ -78,8 +79,18 @@ dev-dependencies). With `Plonky3/` and `Ziren/` cloned inside this repository:
 git -C Plonky3 checkout fb5d0d89 && git -C Plonky3 apply ../patches/plonky3-fb5d0d89.patch
 git -C Ziren checkout f6137ecc \
   && git -C Ziren apply --exclude=crates/prover/tests/dump_binary_tape.rs ../patches/ziren-9398469a.patch \
-  && git -C Ziren apply ../patches/ziren-dumper.patch
+  && git -C Ziren apply ../patches/ziren-dumper.patch \
+  && git -C Ziren apply ../patches/ziren-addr26.patch
 ```
+
+`ziren-addr26.patch` raises `ADDR_BITS` and `PERMUTATION_ID_BITS` from 24 to
+26 (the "26-bit patches" of `paper/notes.md`): at 24 bits `Program::new`
+panics on the real level-1 tape ("the program fits 24-bit addresses").
+`PERMUTATION_ID_BITS` is also a column width of the binary stage, so level 1
+must be recorded with it applied. The 64-byte rewire row of the original
+chain was a commit on the unpublished branch and is not in these patches, so
+the rebuilt machine keeps 1,024 rewire columns: about 5% more level-4 input
+(2,688 main values instead of 2,176 before the forms changes).
 
 Then the `[patch]` section and the grinder as above. Every level runs
 `cargo test --release -p zkm-prover --test dump_binary_tape -- --ignored --nocapture`

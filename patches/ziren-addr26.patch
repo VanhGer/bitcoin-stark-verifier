@@ -1,0 +1,26 @@
+diff --git a/crates/binary-recursion/src/machine/program.rs b/crates/binary-recursion/src/machine/program.rs
+index 3f2d1d87..9e90a347 100644
+--- a/crates/binary-recursion/src/machine/program.rs
++++ b/crates/binary-recursion/src/machine/program.rs
+@@ -36,7 +36,7 @@ use zkm_recursion_core::runtime::blake3::{compress, CHUNK_END, CHUNK_START, IV,
+ use crate::tape::{Op, Operand, Tape, Var, F};
+ 
+ /// Bits of an address.
+-pub const ADDR_BITS: usize = 24;
++pub const ADDR_BITS: usize = 26;
+ 
+ /// Bytes of a Blake3 chunk.
+ const CHUNK_BYTES: usize = 1024;
+diff --git a/crates/binary/src/machine/bits.rs b/crates/binary/src/machine/bits.rs
+index a76e6eb7..06e9d9f9 100644
+--- a/crates/binary/src/machine/bits.rs
++++ b/crates/binary/src/machine/bits.rs
+@@ -46,7 +46,7 @@ pub const BLAKE3: BusName<'static> = BusName::new("blake3");
+ pub const BLAKE3_ROUND_BITS: usize = 3;
+ 
+ /// Bits of a compression's identity on that channel.
+-pub const PERMUTATION_ID_BITS: usize = 24;
++pub const PERMUTATION_ID_BITS: usize = 26;
+ 
+ /// A memory block as integers.
+ pub type Cell = [u32; 4];
