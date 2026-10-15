@@ -1638,19 +1638,21 @@ streaming garbler. It has $481.6$M non-free gates and $1.92\times10^9$ wires,
 with at most $15.6$M live, and used 2.2\,GB peak working memory in under six
 minutes. The circuit accepted the
 valid proof and rejected it with one witness bit flipped; built as a stored
-circuit, the same verifier needed more than 64\,GB. The recursion verifier
-we compare (Table~\ref{tab:recursion}) has $2.2\times$ fewer non-free gates,
-and about $14\times$ fewer than the Boolean-garbled Groth16 verifier; the
-Keccak verifier has $5.1\times$ and $30\times$ fewer. Native-group garbling of
+circuit, the same verifier needed more than 64\,GB. The Keccak verifier has
+$5.1\times$ fewer non-free gates, and $30\times$ fewer than the Boolean-garbled
+Groth16 verifier; the experimental recursion verifier
+(Table~\ref{tab:recursion}) has $2.2\times$ and about $14\times$ fewer. Native-group garbling of
 Groth16~\cite{kflt26native} and witness encryption~\cite{babe2026} produce far smaller
 artifacts, of megabytes, and their proofs need far fewer input bits; both rely
 on pairings and a trusted setup.
 On-chain, the comparison inverts. The Groth16 designs publish 508 to 1{,}019
 input bits and report dispute paths of a few to a few tens of kilobytes, under
-\$60; our dispute publishes 564{,}552 bits and its input component alone is
-about 1.20\,MvB with adaptor signatures or 6.42\,MvB hash-based, one to three
-orders of magnitude more (about $38\times$ deferred binding's 32\,kvB with
-adaptors), before the unconstructed remainder of the
+\$60. Our Keccak dispute publishes 1{,}041{,}024 bits, and its Core-tested
+input component alone is 2.22\,MvB with adaptor signatures or 11.85\,MvB
+hash-based; the recursion verifier's 564{,}552 bits serialize to 1.21 and
+6.43\,MvB, not replayed in Bitcoin Core. That is one to three orders of
+magnitude more (about $38\times$ deferred binding's 32\,kvB even for the
+recursion verifier with adaptors), before the unconstructed remainder of the
 graph. That is the price of verifying the STARK directly rather than wrapping
 it, and \S\ref{sec:protocol} and \S\ref{sec:discussion} are about reducing it.
 
@@ -1663,7 +1665,8 @@ garbled DV-Pari (bitvm-gc, our measurement) & DV-SNARK & 7.7\,GB & n/r & n/r & e
 BABE~\cite{babe2026} & Groth16 & 22.2\,MiB & 508 & Assert 9{,}240\,vB, ChallengeAssert 17{,}400\,vB, WronglyChallenged 149\,vB: 26.8\,kvB, \$56.90 at 2.2\,sat/vB & pairings (GGM+RO), trusted setup\\\addlinespace[2pt]
 deferred-binding WE~\cite{goatpbwe} & Groth16, late inputs & 0.92\,GiB$^{\dagger}$ & 768 & Assert 2{,}154\,B, ChallengeAssert 14{,}312\,B witness and 109{,}393\,B script, WronglyChallenged 64\,B; about 32\,kvB & BABE + DLog\\\addlinespace[2pt]
 PIPE with AADP WE~\cite{pipesv2,aadp2026} & pairing SNARK & $\approx338$\,TB (estimate) & one hash & one hash in Assert, one signature in Disprove; no size reported & heuristic\\\addlinespace[2pt]
-\textbf{this work} & \textbf{STARK recursion proof over $\F$} & \textbf{3.49\,GB} & \textbf{564{,}552} & \textbf{input publication 1.20\,MvB (adaptor, DLog) or 6.42\,MvB (hash-based), about \$2{,}500 or \$13{,}500 at 2.2\,sat/vB; Disprove 97\,vB; graph incomplete}$^{\S}$ & \textbf{Blake3/RO; assumed CCR and adaptive authenticity; unreviewed proof-system changes}$^{\ddagger}$\\\bottomrule
+\textbf{this work} & \textbf{Keccak-$f$ STARK over $\F$, $2^{18}$ rows} & \textbf{1.5\,GB} & \textbf{1{,}041{,}024} & \textbf{input publication 2.22\,MvB (adaptor, DLog) or 11.85\,MvB (hash-based), about \$4{,}700 or \$24{,}900 at 2.2\,sat/vB, Core-replayed; Disprove 97\,vB; graph incomplete}$^{\S}$ & \textbf{Blake3/RO; assumed CCR and adaptive authenticity}$^{\ddagger}$\\\addlinespace[2pt]
+this work, narrow recursion (experimental, not Core-replayed) & STARK recursion proof over $\F$ & 3.49\,GB & 564{,}552 & input publication 1.21\,MvB (adaptor, DLog) or 6.43\,MvB (hash-based), about \$2{,}500 or \$13{,}500 at 2.2\,sat/vB; Disprove 97\,vB; graph incomplete$^{\S}$ & as above, plus unreviewed proof-system changes$^{\ddagger}$\\\bottomrule
 \\
 \end{tabularx}
 \caption{Comparison of verifier artifacts, dispute inputs and on-chain dispute
@@ -1675,20 +1678,20 @@ garbled circuits ($r\pi_1$, $Q=x_D L_D+B$ and $rQ$) plus adaptor tables, as the
 implementation report measures it; a 3.83\,GiB circuit artifact is shared by
 all instances. Its on-chain entry is witness and script bytes as reported; the
 kvB figure is our arithmetic.
-$^{\S}$Our on-chain entry scales the Core-tested per-bit funding-plus-reveal
-costs of Table~\ref{tab:onchain}, measured on the Keccak verifier's
-1{,}041{,}024 input bits, to the recursion verifier's 564{,}552, plus the
-Core-tested reject-label Disprove, for one key set; the challenge, completion, timeout and anchor transactions and the
-multi-copy soldering are not constructed (\S\ref{sec:protocol}), so it is a
-lower bound on the dispute path, not a total. $^{\ddagger}$Verifier assumptions
+$^{\S}$For one key set. The Keccak entry is the Core-tested reveals of
+Table~\ref{tab:onchain}. The recursion entry serializes the same fixtures at
+564{,}552 bits, with every transaction signed and every leaf executed under the
+stack limit, but was not replayed in Bitcoin Core (\S\ref{sec:eval}). Both add
+the Core-tested reject-label Disprove; the challenge, completion, timeout and
+anchor transactions and the multi-copy soldering are not constructed
+(\S\ref{sec:protocol}), so each is a lower bound on the dispute path, not a
+total. $^{\ddagger}$Verifier assumptions
 only. A surrounding protocol additionally uses discrete-logarithm signatures, or
 requires the unimplemented hash-based multi-copy soldering and a post-quantum
-transaction-authorization mechanism. Our figures are for the verifier of the
-last narrow-recursion proof of Ziren's binary stage (Table~\ref{tab:recursion}),
-without public values, with the experimental proof-system changes listed in
-\S\ref{sec:eval}; the $2^{18}$-row Keccak-$f$ verifier has 1.5\,GB, 94.1M
-non-free gates and 1{,}041{,}024 input bits, 2.22\,MvB with adaptors or
-11.88\,MvB hash-based.}
+transaction-authorization mechanism. Neither statement has public values. The
+recursion row is the verifier of the last narrow-recursion proof of Ziren's
+binary stage (Table~\ref{tab:recursion}), with the experimental proof-system
+changes listed in \S\ref{sec:eval}.}
 \label{tab:compare}
 \end{table}
 
