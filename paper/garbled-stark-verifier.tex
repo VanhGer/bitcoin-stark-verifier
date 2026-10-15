@@ -785,14 +785,16 @@ components, not an end-to-end Bitcoin protocol.}
 \end{table}
 
 \paragraph{Setup.} The operator garbles $N$ instances of $C$ from independent
-seeds. A challenger chooses $N-M$ of them to open, re-garbles each opened
-instance from its seed and compares. The streaming garbler does this in one
-garbling pass per instance, reusing the plan that all instances share
-(\S\ref{sec:streaming}). The challenger stores the $M$ kept instances, 1.5\,GB
-each at $2^{18}$ rows. For each kept instance $j$ the operator commits
-$h_j=\mathrm{SHA256}(\ell^j_0)$, the hash of the label of output value 0
-(reject). The intended protocol also fixes one-time keys for the input bits of
-$C$. Publishing bit $b$ of input $i$ must give a challenger only the label of
+seeds. Before any instance is opened, it commits for every instance $j$ the
+hash of its garbled tables, $h_j=\mathrm{SHA256}(\ell^j_0)$, the hash of the
+label of output value 0 (reject), and the instance's input-key material: the
+hashes of its one-time keys and its label translations. A challenger then
+chooses $N-M$ instances to open, re-garbles each opened instance from its seed
+and checks every commitment of that instance; only then is the transaction
+graph signed. The streaming garbler re-garbles in one garbling pass per instance, reusing the plan that all
+instances share (\S\ref{sec:streaming}). The challenger stores the $M$ kept
+instances, 1.5\,GB each at $2^{18}$ rows. The intended protocol fixes one-time
+keys for the input bits of $C$. Publishing bit $b$ of input $i$ must give a challenger only the label of
 value $b$ on wire $i$ in every kept instance. Mosaic provides this correlation
 for its adaptor-signature path~\cite{mosaic26}; the corresponding hash-based
 soldering is open here. The intended transactions would be pre-signed at setup
@@ -923,8 +925,10 @@ single complementary label breaks authenticity (\S\ref{sec:security}),
 (iii)~be \emph{binding}: $\mathsf{G}$ can publish at most one value per wire,
 and the publication is at the same time the authorization of the spending
 transaction, and (iv)~be \emph{public}: any observer can recover $\pi$ and
-check that the published object is well formed, so that a missing or malformed
-publication is itself a Disprove condition. Lamport achieves (i)--(iv) with one
+check that the published object is well formed. A malformed publication does
+not satisfy the Assert script and cannot be spent, and a missing one forfeits
+the operator's stake through AssertTimeout; Disprove is reserved for the reject
+label. Lamport achieves (i)--(iv) with one
 preimage per bit, and its cost is the per-bit script. Figure~\ref{fig:adaptorseq}
 is the adaptor construction of BitVM3 and Mosaic~\cite{bitvm3paper,mosaic26},
 which achieves them with one signature per $k$-bit digit and no per-bit script.
