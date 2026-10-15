@@ -9,6 +9,7 @@ the garbled verifier (`whir-gc`) measures at **564,552 input bits**
 | `plonky3-fb5d0d89.patch` | ProjectZKM/Plonky3 `fb5d0d89` | 22 |
 | `ziren-9398469a.patch` | Ziren branch `whir-gc/narrow-verifier-input` at `9398469a` (on `feat/binary-whir-blake3` `f6137ecc`) | 10 |
 | `zkm_blake3_grind.cu` | — | CUDA proof-of-work grinder that the Plonky3 patch links |
+| `ziren-dumper.patch` | `f6137ecc` + `ziren-9398469a.patch` without its dumper | the dumper test, rewritten (see below) |
 
 Both patches apply with `git apply` to a clean checkout of their base, and the
 result is byte-for-byte the tree the measurements were run from (checked
@@ -65,6 +66,39 @@ Experiment-only: the GPU grinder FFI in `binary-field` (`build.rs`,
 `layout::witness::tests::witness_stacks_columns_and_zeros_the_tail` fail (the
 only failing test in p3-air, p3-sumcheck, p3-binary-pcs, p3-multi-stark,
 p3-bus, p3-whir, p3-merkle-tree).
+
+## Rebuilding from scratch (no saved tapes)
+
+The Ziren base `9398469a` is not published. Its parent, `feat/binary-whir-blake3`
+at `f6137ecc` (ProjectZKM/Ziren), takes every file of `ziren-9398469a.patch`
+except the dumper test, which `ziren-dumper.patch` rewrites (the test and its
+dev-dependencies). With `Plonky3/` and `Ziren/` cloned inside this repository:
+
+```sh
+git -C Plonky3 checkout fb5d0d89 && git -C Plonky3 apply ../patches/plonky3-fb5d0d89.patch
+git -C Ziren checkout f6137ecc \
+  && git -C Ziren apply --exclude=crates/prover/tests/dump_binary_tape.rs ../patches/ziren-9398469a.patch \
+  && git -C Ziren apply ../patches/ziren-dumper.patch
+```
+
+Then the `[patch]` section and the grinder as above. Every level runs
+`cargo test --release -p zkm-prover --test dump_binary_tape -- --ignored --nocapture`
+in `Ziren/`, with `ZIREN_TAPE_OUT=$T VERIFY_VK=false RUST_LOG=info ZIREN_B_MAX_GRIND=50`:
+
+| level | extra environment | writes |
+|---|---|---|
+| 1 | `ZIREN_BINARY_WITNESS_DUMP=$T/shrink_proof.bin` (`ZIREN_B_FOLDS` unset) | `binary_tape.bin` |
+| 2 | `ZIREN_B_SCHEDULE=johnson,3,4 ZIREN_RECURSE_FROM=binary_tape.bin ZIREN_RECURSE_TO=level2_tape-johnson-3-4.bin` | the level-2 tape and proof |
+| 3 | `ZIREN_B_SCHEDULE=johnson,9,5 ZIREN_RECURSE_FROM=level2_tape-johnson-3-4.bin ZIREN_RECURSE_TO=level3_tape-johnson-9-5.bin` | the level-3 tape and proof |
+| 4 | the two commands below | `level4k_tape-johnson-10-5.bin` |
+
+Level 1 builds the Fibonacci guest, so it needs the zkm toolchain (or prebuilt
+ELFs under `crates/test-artifacts/guests/target`); a saved
+`shrink_proof.bin` is reused. The rebuilt levels 1-3 run the patched code,
+where the originals predate most of the patches, so the level-4 figures may
+differ slightly from the table below. The narrow machine binds no public
+values unless `ZIREN_NUM_PUBLIC` says how many of a tape's first inputs it
+should.
 
 ## Reproducing the level-4 tape
 
