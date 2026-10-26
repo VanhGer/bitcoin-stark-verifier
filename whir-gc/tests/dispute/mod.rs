@@ -1,8 +1,12 @@
 //! The dispute's input layer, shared by the dispute tests: Lamport keys per
 //! input bit, the translation ciphertexts that turn a revealed preimage into
-//! that bit's garbled label, and the Assert and Disprove scripts.
+//! that bit's garbled label, and the Assert and Disprove scripts. The
+//! WOTS-translation input layer of ePrint 2026/1684, chunked WOTS plus its
+//! translation table, is in `wots_translation`.
 
 #![allow(dead_code)]
+
+pub mod wots_translation;
 
 use bitcoin::hashes::{hash160, sha256, Hash};
 use bitcoin_script::{define_pushable, script};

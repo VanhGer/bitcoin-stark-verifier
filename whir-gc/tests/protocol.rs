@@ -16,6 +16,10 @@
 //! 4. **Disprove** (script). A hashlock on the label of output value 0: the
 //!    challenger can open it exactly when the asserted `x` is wrong.
 //!
+//! The same dispute runs a second time with the WOTS-translation input
+//! layer of `dispute::wots_translation`: a chunked Winternitz Assert, and the
+//! labels through its translation table.
+//!
 //! What is left out, and why: transaction signatures and timelocks (the
 //! script executor has no transaction to sign; the paper's Take and Challenge
 //! transactions are ordinary), and cut-and-choose (one honestly garbled
@@ -24,6 +28,7 @@
 mod dispute;
 
 use bitcoin_script::{define_pushable, script};
+use dispute::wots_translation::{self, CHUNK_BITS, WotsKeys};
 use dispute::{Lamport, assert_lock, assert_witness, disprove_lock, disproves, read_labels, runs};
 use garbled_snark_verifier::circuits::sect233k1::blake3_ckt::{self, U8};
 use garbled_snark_verifier::circuits::sect233k1::builder::{CircuitAdapter, CircuitTrait};
@@ -133,4 +138,84 @@ fn a_false_claim_is_disproved_and_a_true_one_is_not() {
     // And the hashlock takes nothing but the reject label.
     assert!(runs(script! { { reject.0.to_vec() } }, disprove_lock(&reject)));
     assert!(!disproves(&accept, &reject), "the accept label is not the reject label");
+}
+
+/// The witness of a WOTS Assert leaf as script pushes, chunk 0's first digit
+/// on top: the items of `wots_translation::stack`, in its order, with each digit pushed
+/// as a number, which is the minimal push of its one byte.
+fn wots_translation_witness(sig: &wots_translation::Signature) -> bitcoin::ScriptBuf {
+    script! {
+        for (v, n) in sig.values.iter().zip(&sig.nodes).rev() {
+            for i in (0..wots_translation::CHAINS).rev() { { n[i].to_vec() } { v[i] as u32 } }
+        }
+    }
+}
+
+/// The whole dispute over the WOTS translation: signature → table → labels →
+/// garbled circuit → Disprove. The claim is "I know `x` with `Blake3(x) = h`".
+///
+/// - A true claim: Assert accepts, the challenger gets the accept label, and
+///   cannot Disprove.
+/// - A false claim: Assert still accepts (it only checks the signature), but
+///   the challenger gets the reject label and Disproves.
+/// - A forged signature: Assert rejects it.
+///
+/// It is the one test where the table's labels meet a real garbled circuit.
+/// Both claims are signed under one key only to compare them; the protocol
+/// signs once.
+#[test]
+fn wots_translation_false_claim_is_disproved_and_true_one_is_not() {
+    let mut rng = ChaCha20Rng::seed_from_u64(2027);
+    let x: [u8; INPUT_BYTES] = core::array::from_fn(|_| rng.random());
+    let h = *blake3::hash(&x).as_bytes();
+
+    // Setup: a WOTS key, the table, and the circuit garbled with the table's
+    // labels. 512 bits are padded to 22 chunks; the padding has no wire.
+    let (circuit, output) = preimage_circuit(&h);
+    let chunks = INPUT_BITS.div_ceil(CHUNK_BITS);
+    assert_eq!(chunks, 22);
+    let keys = WotsKeys::new(chunks, &mut rng);
+    let delta = S(rng.random());
+    let (table, labels0) = wots_translation::build(&keys, &rng.random(), delta);
+    let mut inputs0 = vec![S(rng.random()), S(rng.random())];
+    inputs0.extend_from_slice(&labels0[..INPUT_BITS]);
+    let garbled = garble::garble_with(&circuit, INPUT_BITS, output, delta, inputs0);
+    let constants = [garbled.input_label(0, false), garbled.input_label(1, true)];
+    let reject = garbled.output0;
+    let accept = reject ^ garbled.delta;
+    let lock = script! { { wots_translation::assert_lock(&keys.ends) } OP_TRUE };
+    eprintln!("WOTS translation: Assert leaf {} B for {chunks} chunks; table {} B", lock.len(), table.bytes());
+
+    let padded = |x: &[u8]| {
+        let mut bits = bits_of(x);
+        bits.resize(chunks * CHUNK_BITS, false);
+        bits
+    };
+    // The challenger: labels from the table, then evaluate the circuit.
+    let challenge = |sig: &wots_translation::Signature| {
+        let held = wots_translation::read_labels(&keys.ends, &table, sig);
+        garble::evaluate_labels(&circuit, &garbled.ciphertexts, constants, &held[..INPUT_BITS], output).label
+    };
+
+    // A true claim: Assert accepts, the result is the accept label, no Disprove.
+    let honest = keys.sign(&padded(&x));
+    assert!(runs(wots_translation_witness(&honest), lock.clone()), "Assert accepts a well-formed signature");
+    let label = challenge(&honest);
+    assert_eq!(label, accept, "the true claim evaluates to the accept label");
+    assert!(!disproves(&label, &reject), "no Disprove on a true claim");
+
+    // A false claim (one bit of x flipped): Assert still accepts, but the result
+    // is the reject label, which opens Disprove.
+    let mut wrong = x;
+    wrong[7] ^= 0x10;
+    let dishonest = keys.sign(&padded(&wrong));
+    assert!(runs(wots_translation_witness(&dishonest), lock.clone()), "Assert only checks the signature is well formed");
+    let label = challenge(&dishonest);
+    assert_eq!(label, reject, "the false claim evaluates to the reject label");
+    assert!(disproves(&label, &reject), "Disprove opens on a false claim");
+
+    // A forged signature (one node replaced): Assert rejects it.
+    let mut forged = honest.clone();
+    forged.nodes[3][2] = rng.random();
+    assert!(!runs(wots_translation_witness(&forged), lock), "Assert rejects a node outside the key");
 }

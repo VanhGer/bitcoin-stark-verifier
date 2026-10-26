@@ -56,12 +56,19 @@ impl Garbled {
 /// Garble `circuit` with a fresh random `Δ`. `inputs` is the number of input
 /// wires, which follow the two constants at wire indices `2..2 + inputs`.
 pub fn garble(circuit: &CircuitAdapter, inputs: usize, output: usize) -> Garbled {
+    garble_with(circuit, inputs, output, S::random(), (0..2 + inputs).map(|_| S::random()).collect())
+}
+
+/// Garble `circuit` with the caller's `Δ` and false labels of the two
+/// constants and the `inputs` input wires, in wire order. For an input layer
+/// that fixes the labels itself, such as a translation table that derives
+/// each true label and sets the false one to it `⊕ Δ`.
+pub fn garble_with(circuit: &CircuitAdapter, inputs: usize, output: usize, delta: S, inputs0: Vec<S>) -> Garbled {
+    assert_eq!(inputs0.len(), 2 + inputs, "a false label per constant and input wire");
+    assert_ne!(delta, S::from_slice(&[0u8; 16]), "a zero Δ makes the two labels of a wire equal");
     let n = circuit.next_wire();
-    let delta = S::random();
-    let mut label0: Vec<S> = vec![S::from_slice(&[0u8; 16]); n];
-    for l in label0.iter_mut().take(2 + inputs) {
-        *l = S::random();
-    }
+    let mut label0 = inputs0;
+    label0.resize(n, S::from_slice(&[0u8; 16]));
     let mut ciphertexts = Vec::new();
     for (gid, g) in circuit.get_gates().iter().enumerate() {
         let gid = u32::try_from(gid).expect("gate ids fit in u32");
